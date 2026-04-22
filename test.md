@@ -15,6 +15,12 @@ make
 make seed_users
 ```
 
+# 20만 rows 생성
+
+```
+make seed_users
+```
+
 ```
 ab -n 100 -c 10 "http://127.0.0.1:8080/sql?sql=SELECT%20*%20FROM%20users%3B"
 ```
@@ -22,16 +28,9 @@ ab -n 100 -c 10 "http://127.0.0.1:8080/sql?sql=SELECT%20*%20FROM%20users%3B"
 ```
 make clear_users
 ```
-# 20만 rows 생성
-
-```
-make seed_users
-```
-
 # 원하는 row 수로 생성
-
 ```
-make seed_users ROWS=20000
+make seed_users ROWS=10000
 ```
 
 ## 1. READ 테스트 - 싱글 worker
@@ -55,7 +54,7 @@ ab -n 1000 -c 100 \
 터미널 A:
 
 ```bash
-./sqlpd 8080 8 128
+./sqlpd 8080 64 128
 ```
 
 터미널 B:
