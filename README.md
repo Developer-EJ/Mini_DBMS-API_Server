@@ -1,10 +1,23 @@
 # Mini DBMS with HTTP API Server
 
+<table>
+  <tr>
+    <td align="center"><b>Thread 1 (단일 스레드)</b></td>
+    <td align="center"><b>Thread 128 (멀티 스레드)</b></td>
+  </tr>
+  <tr>
+    <td><img src="asset/th1-read.png" alt="Thread 1 Read Benchmark" width="440"/></td>
+    <td><img src="asset/th128-read.png" alt="Thread 128 Read Benchmark" width="440"/></td>
+  </tr>
+</table>
+
+---
+
 ## 1. 프로젝트 배경 및 목표
 
 기존에 만들었던 SQL 처리기와 DBMS를 외부 클라이언트에서 접근 가능하도록 HTTP API 서버로 확장하는 것이 목표입니다.
 
-클라이언트는 HTTP 요청으로 SQL을 전송하고, 서버는 이를 파싱·실행한 뒤 결과를 JSON으로 반환합니다.  
+클라이언트는 HTTP 요청으로 SQL을 전송하고, 서버는 이를 파싱·실행한 뒤 결과를 반환.  
 지원 쿼리: `SELECT` (WHERE, BETWEEN 포함), `INSERT`
 
 ---
@@ -29,7 +42,7 @@ Client (curl / wrk)
         ▼
    SQL Pipeline
    ┌────────────────────────────────┐
-   │ Lexer → Parser → Schema 검증  │
+   │ Lexer → Parser →  Schema 검증   │
    │          ↓                     │
    │       Executor                 │
    │          ↓                     │
@@ -207,34 +220,108 @@ curl -X POST http://localhost:8080/query \
 
 ### 2) 시도해본 점 — 최적의 Thread 수와 Queue 길이 찾기
 
-실제로는 더 많은 조건을 측정했지만, 핵심만 간단히 정리합니다.
+Thread Pool의 `workers` 수와 `queue_capacity`가 서버 동작에 어떤 영향을 주는지 `wrk`로 비교했다. 목적은 최고 처리량만 찾는 것이 아니라, 현재 서버 구조에서 503 에러와 대기시간을 함께 관찰하는 것이다.
 
-Thread Pool의 `workers` 수와 Queue 길이가 서버 동작에 어떤 영향을 주는지 `wrk`로 비교했습니다.
+현재 Mini DBMS는 SQL 실행 구간이 write lock으로 직렬화되어 있어 worker 수를 늘려도 처리량이 선형으로 증가하지 않는다. 따라서 workers와 queue는 순수 처리량 튜닝값이라기보다, 503 에러와 대기시간 사이의 trade-off를 조절하는 값으로 해석했다.
 
-**Workers 실험 (1 ~ 16개)**
+### 실험 조건
 
-INSERT 단독 부하와 SELECT·INSERT 혼합 부하를 측정했습니다.  
-Mini DBMS에서는 SQL 실행 구간이 write lock으로 직렬화되어 있기 때문에,  
-worker 수를 늘린다고 처리량이 선형으로 증가하지 않았습니다.
+| 항목 | 값 |
+|------|----|
+| 측정 도구 | `wrk` + Lua script |
+| 측정 시간 | 조건당 5초 x 3회 |
+| 집계 방식 | RPS/latency는 median, errors/requests는 3회 합계 |
+| 사전 데이터 | 매 run 시작 전 `data/users.dat`에 1,000행 seed |
+| 일반 실험 | `wrk -t4 -c16` |
+| queue 실험 | `wrk -t4 -c500` |
+| 상세 결과 | `tests/bench_report.md` |
+| 원본 데이터 | `tests/bench_latest_summary.tsv`, `tests/bench_latest_raw.tsv` |
 
-| 부하 유형 | 최적 workers | 결과 |
-|---|---|---|
-| INSERT 단독 | 2 | 가장 높은 median 처리량 |
-| SELECT + INSERT 혼합 | 2 | socket error 없이 가장 안정적 |
+`queue` 실험에서 `connections=500`을 사용한 이유는 실제 운영 동시 접속 수를 가정한 것이 아니라, 작은 queue에서 포화와 503 에러가 발생하는지 확인하기 위한 스트레스 조건이다. 다만 `wrk`는 closed-loop 방식이라 동시에 처리 중이거나 대기 중인 요청 수가 `connections` 값에 의해 제한된다. 따라서 `queue=500`부터 에러가 사라진 것은 서버 고유의 최적 queue를 찾았다기보다, 이번 `wrk -c500` 조건에서 설정한 동시 요청 수를 queue가 수용한 결과에 가깝다.
 
-**Queue 길이 실험**
+### 핵심 결과
 
-`queue=500`은 속도에 있어 의미 있는 수치라고 보기는 어려웠습니다.  
-Queue 실험의 의미는 수치보다 **backpressure 특성 확인**에 있었습니다.
+이번 실험에서 가장 방어 가능한 실행값:
 
-- Queue가 작으면 → `503`·socket error 발생
-- Queue가 충분히 크면 → 실패 대신 대기가 늘어남
+```bash
+./sqlpd 8080 2 500
+```
 
-**결론**
+| 파라미터 | 값 | 해석 |
+|---------|:------:|------|
+| `workers` | 2 | INSERT median 처리량 최고, 혼합 쿼리에서 socket error 없이 가장 높은 처리량 |
+| `queue_capacity` | 500 | `wrk -c500` 조건에서 에러가 사라진 수용량. 독립적인 최적 queue 값으로 보기는 어려움 |
 
-수치 자체보다는 Thread Pool 파라미터를 **처리량, 오류 여부, 부하 모델의 차이**까지 함께 해석했다는 점에 의미가 있습니다.
+`workers=2`는 이번 실험에서 안정적인 설정으로 볼 수 있다. 반면 `queue=500`은 100ms p95 SLO를 만족한 값도, 보편적인 최적값도 아니다. `wrk -c500`이라는 특수한 closed-loop 조건에서 에러가 사라진 값이며, 이번 실험만으로는 queue의 독립적인 최적값을 찾았다고 보기 어렵다. 실제 환경이나 open-loop 부하처럼 요청이 일정 속도로 계속 유입되는 조건에서는 queue가 503 에러와 tail latency를 조절하는 중요한 backpressure 파라미터가 된다.
 
----
+### INSERT 처리량
+
+```mermaid
+xychart-beta
+    title "INSERT median throughput"
+    x-axis "workers" [1, 2, 4, 8, 16]
+    y-axis "req/sec" 0 --> 12000
+    bar [10822.78, 11380.22, 9309.41, 7073.59, 9746.67]
+```
+
+| workers | median req/sec | p95 ms | socket errors |
+|:-------:|---------------:|-------:|--------------:|
+| 1 | 10,822.78 | 7.35 | 0 |
+| 2 | 11,380.22 | 5.52 | 0 |
+| 4 | 9,309.41 | 21.13 | 0 |
+| 8 | 7,073.59 | 12.56 | 0 |
+| 16 | 9,746.67 | 8.99 | 0 |
+
+### 혼합 쿼리 처리량
+
+```mermaid
+xychart-beta
+    title "Mixed query median throughput"
+    x-axis "workers" [1, 2, 4, 8, 16]
+    y-axis "req/sec" 0 --> 1300
+    bar [786.98, 969.72, 522.40, 1173.17, 18.20]
+```
+
+| workers | median req/sec | p95 ms | socket errors |
+|:-------:|---------------:|-------:|--------------:|
+| 1 | 786.98 | 32.28 | 0 |
+| 2 | 969.72 | 67.62 | 0 |
+| 4 | 522.40 | 16.34 | 32 |
+| 8 | 1,173.17 | 21.47 | 16 |
+| 16 | 18.20 | 16.61 | 32 |
+
+혼합 쿼리에서는 `workers=8`의 RPS가 가장 높았지만 socket error가 발생했다. 안정성을 우선하면 `workers=2`가 더 방어 가능한 설정이다.
+
+### Queue 에러
+
+아래 그래프에서 bar는 `Non-2xx`, line은 socket errors를 의미한다.
+
+```mermaid
+xychart-beta
+    title "Queue capacity vs errors"
+    x-axis "queue" [100, 500, 1000, 1500, 2000]
+    y-axis "errors" 0 --> 90000
+    bar [89172, 0, 0, 0, 0]
+    line [73420, 0, 0, 0, 0]
+```
+
+| queue | median req/sec | p95 ms | Non-2xx | socket errors |
+|:-----:|---------------:|-------:|--------:|--------------:|
+| 100 | 12,285.92 | 175.11 | 89,172 | 73,420 |
+| 500 | 8,132.68 | 161.68 | 0 | 0 |
+| 1,000 | 6,471.81 | 109.35 | 0 | 0 |
+| 1,500 | 3,776.56 | 441.62 | 0 | 0 |
+| 2,000 | 5,564.58 | 154.94 | 0 | 0 |
+
+이 결과는 `queue=500`이 성능상 최적이라는 뜻이 아니다. `wrk -c500` 조건에서는 동시에 outstanding 상태인 요청 수가 대략 500개로 제한되므로, queue가 그 정도 크기가 되면 에러가 사라지는 것이 자연스럽다. 이번 queue 실험의 의미는 "최적 queue 산정"보다 "queue가 작으면 포화로 503/socket error가 발생하고, 충분히 크면 실패 대신 대기가 늘어난다"는 backpressure 특성을 확인한 데 있다.
+
+
+조건은 환경 변수로 조정할 수 있다.
+
+```bash
+DURATION=10 RUNS=5 WRK_THREADS=4 WRK_CONNECTIONS=16 bash tests/bench_threadpool.sh 8080
+QUEUE_CONNECTIONS=1000 QUEUE_VALUES="100 500 1000 1500 2000" bash tests/bench_threadpool.sh 8080
+```
 
 ## 파일 구조
 
