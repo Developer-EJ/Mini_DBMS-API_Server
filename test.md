@@ -10,7 +10,7 @@
 # 빌드
 make
 
-# READ 테스트용 100만 row 생성
+# READ 테스트용 20만 row 생성
 # 기존 data/users.dat를 덮어쓴다.
 make seed_users
 ```
@@ -148,7 +148,7 @@ Failed requests
 ## 실험 표 양식
 
 ```text
-READ point query, rows=1,000,000, ab=-n 10000 -c 100
+READ point query, rows=200,000, ab=-n 10000 -c 100
 
 workers | RPS | avg latency | p50 | p95 | p99 | failed
 --------|-----|-------------|-----|-----|-----|-------
@@ -163,4 +163,3 @@ workers | RPS | avg latency | p50 | p95 | p99 | failed
 1       |     |             |     |     |     |
 8       |     |             |     |     |     |
 ```
-

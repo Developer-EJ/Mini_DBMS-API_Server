@@ -30,7 +30,7 @@ mkdir -p data
 부하 테스트용 대용량 데이터는 명령어로 만들고 지울 수 있다:
 
 ```
-make seed_users                 # 기본 1,000,000 rows 생성
+make seed_users                 # 기본 200,000 rows 생성
 make seed_users ROWS=100000     # 100,000 rows 생성
 make clear_users                # data/users.dat 비우기
 ```
@@ -174,7 +174,7 @@ curl http://localhost:8080/sql -d 'SELECT * FROM users WHERE age BETWEEN 20 AND 
 # 터미널 A에서 Ctrl+C
 ```
 
-# 100만 rows 생성
+# 20만 rows 생성
 
 ```
 make seed_users

@@ -5,7 +5,7 @@
 
 static void usage(const char *argv0) {
     fprintf(stderr, "Usage: %s [row_count] [output_path]\n", argv0);
-    fprintf(stderr, "  row_count defaults to 1000000\n");
+    fprintf(stderr, "  row_count defaults to 200000\n");
     fprintf(stderr, "  output_path defaults to data/users.dat\n");
 }
 
@@ -19,7 +19,7 @@ static long parse_rows(const char *text) {
 }
 
 int main(int argc, char **argv) {
-    long rows = 1000000;
+    long rows = 200000;
     const char *path = "data/users.dat";
 
     if (argc > 3) {

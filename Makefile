@@ -59,7 +59,7 @@ perf_sim: $(PERF_SRCS)
 gen_data: tools/gen_data.c
 	$(CC) $(CFLAGS) -o gen_data $^
 
-ROWS ?= 1000000
+ROWS ?= 200000
 USERS_DATA ?= data/users.dat
 
 seed_users: gen_data
