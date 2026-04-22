@@ -241,6 +241,174 @@ static int extract_query_param(const char *query, char *out, size_t cap) {
     return rc;
 }
 
+static const char *skip_ws(const char *p) {
+    while (*p && isspace((unsigned char)*p))
+        p++;
+    return p;
+}
+
+static int json_hex_value(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static int json_decode_string(const char **cursor, char *out, size_t cap) {
+    const char *p = *cursor;
+    size_t len = 0;
+
+    if (!p || *p != '"' || !out || cap == 0)
+        return -1;
+    p++;
+
+    while (*p && *p != '"') {
+        unsigned char ch = (unsigned char)*p++;
+
+        if (ch == '\\') {
+            ch = (unsigned char)*p++;
+            switch (ch) {
+                case '"': break;
+                case '\\': break;
+                case '/': break;
+                case 'b': ch = '\b'; break;
+                case 'f': ch = '\f'; break;
+                case 'n': ch = '\n'; break;
+                case 'r': ch = '\r'; break;
+                case 't': ch = '\t'; break;
+                case 'u': {
+                    int code = 0;
+                    for (int i = 0; i < 4; i++) {
+                        int v = json_hex_value(p[i]);
+                        if (v < 0) return -1;
+                        code = (code << 4) | v;
+                    }
+                    p += 4;
+                    if (code > 0x7f)
+                        return -1;
+                    ch = (unsigned char)code;
+                    break;
+                }
+                default:
+                    return -1;
+            }
+        }
+
+        if (len + 1 >= cap)
+            return -1;
+        out[len++] = (char)ch;
+    }
+
+    if (*p != '"')
+        return -1;
+
+    out[len] = '\0';
+    *cursor = p + 1;
+    return 0;
+}
+
+static int json_skip_string(const char **cursor) {
+    const char *p = *cursor;
+
+    if (!p || *p != '"')
+        return -1;
+    p++;
+
+    while (*p && *p != '"') {
+        unsigned char ch = (unsigned char)*p++;
+
+        if (ch == '\\') {
+            ch = (unsigned char)*p++;
+            switch (ch) {
+                case '"':
+                case '\\':
+                case '/':
+                case 'b':
+                case 'f':
+                case 'n':
+                case 'r':
+                case 't':
+                    break;
+                case 'u':
+                    for (int i = 0; i < 4; i++) {
+                        if (json_hex_value(p[i]) < 0)
+                            return -1;
+                    }
+                    p += 4;
+                    break;
+                default:
+                    return -1;
+            }
+        }
+    }
+
+    if (*p != '"')
+        return -1;
+
+    *cursor = p + 1;
+    return 0;
+}
+
+static int json_skip_value(const char **cursor) {
+    const char *p = skip_ws(*cursor);
+
+    if (*p == '"') {
+        if (json_skip_string(&p) != 0)
+            return -1;
+        *cursor = p;
+        return 0;
+    }
+
+    while (*p && *p != ',' && *p != '}')
+        p++;
+
+    *cursor = p;
+    return 0;
+}
+
+static int extract_json_field(const char *body, const char *key,
+                              char *out, size_t cap) {
+    const char *p = skip_ws(body);
+
+    if (*p != '{')
+        return -1;
+    p++;
+
+    while (*p) {
+        char field[64];
+
+        p = skip_ws(p);
+        if (*p == '}')
+            break;
+        if (*p != '"')
+            return -1;
+
+        if (json_decode_string(&p, field, sizeof(field)) != 0)
+            return -1;
+
+        p = skip_ws(p);
+        if (*p != ':')
+            return -1;
+        p = skip_ws(p + 1);
+
+        if (strcmp(field, key) == 0)
+            return json_decode_string(&p, out, cap);
+
+        if (json_skip_value(&p) != 0)
+            return -1;
+
+        p = skip_ws(p);
+        if (*p == ',') {
+            p++;
+            continue;
+        }
+        if (*p == '}')
+            break;
+    }
+
+    return -1;
+}
+
 int http_parser_extract_sql(const HttpRequest *req, char *out, size_t cap) {
     if (!req || !out || cap == 0) return -1;
 
@@ -253,6 +421,9 @@ int http_parser_extract_sql(const HttpRequest *req, char *out, size_t cap) {
         if (strncmp(req->body, "sql=", 4) == 0 ||
             strncmp(req->body, "q=", 2) == 0)
             return extract_query_param(req->body, out, cap);
+        if (extract_json_field(req->body, "sql", out, cap) == 0 ||
+            extract_json_field(req->body, "q", out, cap) == 0)
+            return 0;
         if (req->body_len >= cap)
             return -1;
         memcpy(out, req->body, req->body_len);

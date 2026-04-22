@@ -9,6 +9,10 @@
 
 #define DISPATCHER_SQL_MAX 65536
 
+static int is_sql_route(const char *path) {
+    return strcmp(path, "/query") == 0 || strcmp(path, "/sql") == 0;
+}
+
 int dispatcher_handle_client(int client_fd, EngineAdapter *engine) {
     HttpRequest req;
     char *sql = NULL;
@@ -37,7 +41,7 @@ int dispatcher_handle_client(int client_fd, EngineAdapter *engine) {
         return -1;
     }
 
-    if (strcmp(req.path, "/sql") != 0) {
+    if (!is_sql_route(req.path)) {
         response_write_error(client_fd, 404, "route not found");
         http_request_free(&req);
         return -1;
