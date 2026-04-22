@@ -30,7 +30,7 @@ make clear_users
 ```
 # 원하는 row 수로 생성
 ```
-make seed_users ROWS=10000
+make seed_users ROWS=2000
 ```
 
 ## 1. READ 테스트 - 싱글 worker
