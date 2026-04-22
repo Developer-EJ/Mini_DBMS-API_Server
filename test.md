@@ -15,6 +15,22 @@ make
 make seed_users
 ```
 
+# 데이터 초기화
+```
+make clear_users
+```
+# 20만 rows 생성
+
+```
+make seed_users
+```
+
+# 원하는 row 수로 생성
+
+```
+make seed_users ROWS=20000
+```
+
 ## 1. READ 테스트 - 싱글 worker
 
 터미널 A:
