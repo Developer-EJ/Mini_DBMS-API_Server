@@ -27,9 +27,6 @@ ab -n 100 -c 10 "http://127.0.0.1:8080/sql?sql=SELECT%20*%20FROM%20users%3B"
 # 데이터 초기화
 ```
 make clear_users
-```
-# 원하는 row 수로 생성
-```
 make seed_users ROWS=10000
 ```
 
