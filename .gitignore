@@ -56,6 +56,7 @@ dkms.conf
 
 # Build targets
 sqlp
+sqlpd
 sqlp_sim
 gen_data
 test_bptree
