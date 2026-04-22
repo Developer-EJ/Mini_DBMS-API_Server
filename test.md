@@ -182,3 +182,10 @@ workers | RPS | avg latency | p50 | p95 | p99 | failed
 1       |     |             |     |     |     |
 8       |     |             |     |     |     |
 ```
+
+
+lock 해제 테스트
+```
+make sqlpd sqlpd_nolock
+TOTAL=300 WORKERS=8 BATCH=100 bash test_atomicity.sh
+```
