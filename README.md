@@ -201,7 +201,7 @@ curl -X POST http://localhost:8080/query \
 
 ## 5. 쟁점 포인트
 
-### 1) 동적 스레드 풀 구성 방식
+### 1) 실무 DBMS Thread Pool 구성 방식
 
 저희는 고정 크기 Thread Pool을 선택했지만, 실무 DBMS는 트래픽에 따라 스레드 수를 동적으로 운영합니다.
 
