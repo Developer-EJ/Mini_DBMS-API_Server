@@ -1,23 +1,39 @@
 CC     = gcc
-CFLAGS = -std=c99 -Wall -Wextra -Iinclude
+CFLAGS = -std=c99 -Wall -Wextra -D_XOPEN_SOURCE=700 -Iinclude
 
-# ── 메인 빌드 소스 ─────────────────────────────────────────
-SRCS = src/main.c            \
-       src/input/input.c     \
-       src/input/lexer.c     \
-       src/parser/parser.c   \
-       src/schema/schema.c   \
-       src/executor/executor.c \
-       src/bptree/bptree.c   \
-       src/index/index_manager.c
+# ── 엔진 소스 (CLI / HTTP API 서버 공유) ───────────────────
+ENGINE_SRCS = src/input/input.c       \
+              src/input/lexer.c       \
+              src/parser/parser.c     \
+              src/schema/schema.c     \
+              src/executor/executor.c \
+              src/bptree/bptree.c     \
+              src/index/index_manager.c
+
+# ── CLI 빌드 소스 ─────────────────────────────────────────
+SRCS = src/main.c $(ENGINE_SRCS)
+
+# ── HTTP API 서버 빌드 소스 ───────────────────────────────
+SERVER_SRCS = src/server_main.c            \
+              src/server/server.c          \
+              src/server/http_parser.c     \
+              src/server/threadpool.c      \
+              src/server/dispatcher.c      \
+              src/server/engine_adapter.c  \
+              src/server/response.c        \
+              $(ENGINE_SRCS)
 
 TARGET = sqlp
+SERVER_TARGET = sqlpd
 
 # ── 기본 빌드 ──────────────────────────────────────────────
-all: $(TARGET)
+all: $(TARGET) $(SERVER_TARGET)
 
 $(TARGET): $(SRCS)
 	$(CC) $(CFLAGS) -o $@ $^
+
+$(SERVER_TARGET): $(SERVER_SRCS)
+	$(CC) $(CFLAGS) -pthread -o $@ $^
 
 # ── 디스크 I/O 시뮬레이션 빌드 (B+ 트리 높이별 시간 비교용) ──
 sim: $(SRCS)
@@ -90,6 +106,6 @@ test_executor: tests/test_executor.c  \
 
 # ── 정리 ───────────────────────────────────────────────────
 clean:
-	rm -f $(TARGET) sqlp_sim $(TEST_BINS) test_perf test_perf_sim gen_data
+	rm -f $(TARGET) $(SERVER_TARGET) sqlp_sim $(TEST_BINS) test_perf test_perf_sim gen_data
 
 .PHONY: all sim perf perf_sim gen_data test clean
