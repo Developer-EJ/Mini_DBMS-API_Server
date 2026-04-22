@@ -161,13 +161,27 @@ curl -X POST http://localhost:8080/query \
 
 ### 응답 형식
 
+**SELECT** — `text/plain` ASCII 테이블
+
+```
++----+-------+-----+-------------------+
+| id | name  | age | email             |
++----+-------+-----+-------------------+
+| 1  | Alice | 30  | alice@example.com |
++----+-------+-----+-------------------+
+(1 rows)
+```
+
+**INSERT** — `application/json`
+
 ```json
-{
-  "rows": [
-    {"id": "1", "name": "Alice", "age": "30", "email": "alice@example.com"}
-  ],
-  "count": 1
-}
+{"ok": true, "type": "insert", "affected_rows": 1}
+```
+
+**에러** — `application/json`
+
+```json
+{"ok": false, "error": {"code": "BAD_SQL", "message": "..."}}
 ```
 
 ---
