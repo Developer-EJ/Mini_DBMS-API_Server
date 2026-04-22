@@ -109,6 +109,6 @@ test_executor: tests/test_executor.c  \
 
 # ── 정리 ───────────────────────────────────────────────────
 clean:
-	rm -f $(TARGET) $(SERVER_TARGET) sqlp_sim $(TEST_BINS) test_perf test_perf_sim gen_data
+	rm -f $(TARGET) $(SERVER_TARGET) sqlpd_nolock sqlp_sim $(TEST_BINS) test_perf test_perf_sim gen_data
 
 .PHONY: all sim perf perf_sim gen_data test clean
