@@ -203,14 +203,15 @@ curl -X POST http://localhost:8080/query \
 
 ### 1) 실무 DBMS Thread Pool 구성 방식
 
-저희는 고정 크기 Thread Pool을 선택했지만, 실무 DBMS는 트래픽에 따라 스레드 수를 동적으로 운영합니다.
+| 시스템 | 동시성 처리 방식 | 대표 설정값 | 핵심 포인트 |
+|---|---|---:|---|
+| MySQL | 연결 1개당 스레드 1개가 기본 | `max_connections=151` | 151은 스레드 수가 아니라 최대 연결 수. Thread Pool은 별도 기능 |
+| PostgreSQL | 연결 1개당 프로세스 1개 | `max_connections=100` | 스레드가 아니라 프로세스로 격리. 안정성은 높지만 연결이 많으면 비용 증가 |
+| MongoDB | 클라이언트/드라이버 connection pool 중심 | `maxPoolSize=100` | 서버 thread 수보다 애플리케이션 connection pool 설정이 자주 중요 |
+| Java ExecutorService | 개발자가 thread 수와 queue 직접 설정 | `corePoolSize`, `maxPoolSize`, `workQueue` | fixed/cached/work-stealing 등 목적에 맞게 선택 가능 |
+| Mini DBMS | 고정 Thread Pool + bounded queue | `workers=2`, `queue=500 관찰` | SQL write lock 때문에 worker 증가가 선형 성능 향상으로 이어지지 않음 |
 
-| DBMS | 방식 | 기본 스레드 수 | 특징 |
-|---|---|---|---|
-| MySQL | 고정 Thread Pool + 캐시 | 151개 | 스레드 재사용으로 생성 비용 절약 |
-| PostgreSQL | 연결당 프로세스 | 100개 | 스레드 대신 프로세스, 안정성 높음 |
-| MongoDB | 동적 Thread Pool | 부하에 따라 자동 조절 | 유연하지만 관리 복잡 |
-| Java (ExecutorService) | 고정/동적 선택 가능 | 설정값 | mutex·queue·CV 추상화 제공 |
+> 실무 시스템도 모두 같은 방식으로 thread를 쓰지는 않으며, 스레드 수는 고정 공식이 아니라 workload와 병목 지점에 따라 측정으로 결정한다.
 
 **공통 원칙**
 
@@ -315,13 +316,7 @@ xychart-beta
 
 이 결과는 `queue=500`이 성능상 최적이라는 뜻이 아니다. `wrk -c500` 조건에서는 동시에 outstanding 상태인 요청 수가 대략 500개로 제한되므로, queue가 그 정도 크기가 되면 에러가 사라지는 것이 자연스럽다. 이번 queue 실험의 의미는 "최적 queue 산정"보다 "queue가 작으면 포화로 503/socket error가 발생하고, 충분히 크면 실패 대신 대기가 늘어난다"는 backpressure 특성을 확인한 데 있다.
 
-
-조건은 환경 변수로 조정할 수 있다.
-
-```bash
-DURATION=10 RUNS=5 WRK_THREADS=4 WRK_CONNECTIONS=16 bash tests/bench_threadpool.sh 8080
-QUEUE_CONNECTIONS=1000 QUEUE_VALUES="100 500 1000 1500 2000" bash tests/bench_threadpool.sh 8080
-```
+---
 
 ## 파일 구조
 
